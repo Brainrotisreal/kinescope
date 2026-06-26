@@ -4,7 +4,8 @@ export default function App() {
   const [url, setUrl] = useState('');
   const [downloadDir, setDownloadDir] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('bestvideo+bestaudio/best');
-  const [writeThumbnail, setWriteThumbnail] = useState(false);
+  const [writeThumbnailOnly, setWriteThumbnailOnly] = useState(false);
+  const [writeThumbnailWithVideo, setWriteThumbnailWithVideo] = useState(false);
   const [isGallery, setIsGallery] = useState(false);
 
   const [videoInfo, setVideoInfo] = useState(null);
@@ -28,7 +29,8 @@ export default function App() {
     setVideoInfo(null);
     setProgress(null);
     setError('');
-    setWriteThumbnail(false);
+    setWriteThumbnailOnly(false);
+    setWriteThumbnailWithVideo(false);
     setIsGallery(false);
   };
 
@@ -342,7 +344,13 @@ export default function App() {
     setProgress({ status: 'starting', percent: 0, message: 'Contacting host stream...' });
     if (window.pywebview?.api) {
       try {
-        await window.pywebview.api.start_download(url, downloadDir, selectedFormat, writeThumbnail);
+        await window.pywebview.api.start_download(
+          url,
+          downloadDir,
+          selectedFormat,
+          writeThumbnailOnly || writeThumbnailWithVideo,
+          writeThumbnailOnly
+        );
       } catch (err) {
         setError('Extraction trigger failed: ' + err.message);
         setIsDownloading(false);
@@ -370,7 +378,8 @@ export default function App() {
             setCompletionState('animating');
             setUrl('');
             setVideoInfo(null);
-            setWriteThumbnail(false);
+            setWriteThumbnailOnly(false);
+            setWriteThumbnailWithVideo(false);
             setIsGallery(false);
           }, 1500);
         }
@@ -484,11 +493,26 @@ export default function App() {
               <label className="tactile-checkbox">
                 <input
                   type="checkbox"
-                  checked={writeThumbnail}
-                  onChange={(e) => setWriteThumbnail(e.target.checked)}
+                  checked={writeThumbnailOnly}
+                  onChange={(e) => {
+                    setWriteThumbnailOnly(e.target.checked);
+                    if (e.target.checked) setWriteThumbnailWithVideo(false);
+                  }}
                 />
                 <span className="checkbox-box"></span>
                 <span className="checkbox-text">EXTRACT THUMBNAIL</span>
+              </label>
+              <label className="tactile-checkbox">
+                <input
+                  type="checkbox"
+                  checked={writeThumbnailWithVideo}
+                  onChange={(e) => {
+                    setWriteThumbnailWithVideo(e.target.checked);
+                    if (e.target.checked) setWriteThumbnailOnly(false);
+                  }}
+                />
+                <span className="checkbox-box"></span>
+                <span className="checkbox-text">EXTRACT THUMBNAIL WITH VIDEO</span>
               </label>
             </div>
           </>

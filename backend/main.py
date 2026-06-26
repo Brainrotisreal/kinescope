@@ -309,10 +309,10 @@ class Api:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def start_download(self, url, download_dir, format_id, write_thumbnail=False):
+    def start_download(self, url, download_dir, format_id, write_thumbnail=False, thumbnail_only=False):
         """Launches video download in a separate thread."""
         self._cancel_requested = False
-        thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id, write_thumbnail))
+        thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id, write_thumbnail, thumbnail_only))
         thread.daemon = True
         thread.start()
         return {'status': 'started'}
@@ -489,7 +489,7 @@ class Api:
                 'message': f"FFmpeg download failed: {str(e)}"
             })
 
-    def _download_worker(self, url, download_dir, format_id, write_thumbnail=False):
+    def _download_worker(self, url, download_dir, format_id, write_thumbnail=False, thumbnail_only=False):
         """Worker thread that executes the yt-dlp download or gallery-dl extraction."""
         try:
             self._send_progress({'status': 'starting', 'message': 'Initializing extraction...'})
@@ -582,8 +582,10 @@ class Api:
                 ydl_opts['format'] = format_id
                 ydl_opts['merge_output_format'] = 'mp4'
 
-            if write_thumbnail:
+            if write_thumbnail or thumbnail_only:
                 ydl_opts['writethumbnail'] = True
+            if thumbnail_only:
+                ydl_opts['skip_download'] = True
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
