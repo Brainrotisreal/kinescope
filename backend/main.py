@@ -223,9 +223,81 @@ class Api:
         thread.start()
         return {'status': 'started'}
 
+    def _download_direct_binary(self, url, dest_path, name, progress_range):
+        start_pct, end_pct = progress_range
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            block_size = 512 * 1024
+            start_time = time.time()
+            
+            with open(dest_path, 'wb') as target:
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    downloaded += len(buffer)
+                    target.write(buffer)
+                    
+                    elapsed = time.time() - start_time
+                    speed_val = downloaded / elapsed if elapsed > 0 else 0
+                    speed_str = (f"{speed_val / (1024 * 1024):.1f} MB/s"
+                                 if speed_val > 1024 * 1024
+                                 else f"{speed_val / 1024:.1f} KB/s")
+                    
+                    inner_pct = (downloaded / total_size) if total_size > 0 else 0
+                    percent = start_pct + inner_pct * (end_pct - start_pct)
+                    
+                    self._send_progress({
+                        'status': 'downloading',
+                        'percent': percent,
+                        'speed': speed_str,
+                        'downloaded': f"{downloaded / (1024 * 1024):.1f} MB",
+                        'total': f"{total_size / (1024 * 1024):.1f} MB",
+                        'filename': name,
+                        'message': f"Downloading {name}..."
+                    })
+            
+            # Set executable permissions
+            try:
+                st = os.stat(dest_path)
+                os.chmod(dest_path, st.st_mode | 0o111)
+            except Exception as e:
+                print(f"[Api] Error setting executable permission on {dest_path}: {e}")
+
     def _ffmpeg_downloader_worker(self, bin_dir):
         """Downloads the latest FFmpeg static binary from GitHub and extracts it locally."""
         try:
+            # Platform-specific macOS handler (Shaka project binaries)
+            if sys.platform == 'darwin':
+                import platform
+                is_arm = platform.machine() == 'arm64'
+                suffix = 'arm64' if is_arm else 'x64'
+                
+                ffmpeg_url = f"https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.1-1/ffmpeg-osx-{suffix}"
+                ffprobe_url = f"https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.1-1/ffprobe-osx-{suffix}"
+                
+                os.makedirs(bin_dir, exist_ok=True)
+                
+                # 1. Download ffmpeg (0% to 50% progress)
+                ffmpeg_path = os.path.join(bin_dir, 'ffmpeg')
+                self._download_direct_binary(ffmpeg_url, ffmpeg_path, 'ffmpeg', (0, 50))
+                
+                # 2. Download ffprobe (50% to 100% progress)
+                ffprobe_path = os.path.join(bin_dir, 'ffprobe')
+                self._download_direct_binary(ffprobe_url, ffprobe_path, 'ffprobe', (50, 100))
+                
+                self._custom_ffmpeg_exe = ffmpeg_path
+                self._send_progress({
+                    'status': 'completed',
+                    'percent': 100,
+                    'message': 'FFmpeg successfully installed!',
+                    'ffmpeg_path': ffmpeg_path,
+                })
+                return
+
+            # Default Windows / zip handler (remains unchanged)
             self._send_progress({
                 'status': 'downloading',
                 'percent': 0,
@@ -236,14 +308,8 @@ class Api:
                 'message': 'Downloading FFmpeg archive...'
             })
 
-            # Select download target based on platform
-            if sys.platform == 'darwin':
-                url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-osx64-gpl.zip"
-                bin_names = ['ffmpeg', 'ffprobe']
-            else:
-                # Windows (win32) and other platforms default
-                url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-                bin_names = ['ffmpeg.exe', 'ffprobe.exe']
+            url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+            bin_names = ['ffmpeg.exe', 'ffprobe.exe']
 
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req) as response:
