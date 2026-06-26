@@ -272,7 +272,8 @@ export default function App() {
   const handleScanInfo = async (scanUrl) => {
     setError('');
     setIsLoadingInfo(true);
-    setWriteThumbnail(false);
+    setWriteThumbnailOnly(false);
+    setWriteThumbnailWithVideo(false);
     setIsGallery(false);
     if (window.pywebview?.api) {
       try {
