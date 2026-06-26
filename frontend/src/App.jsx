@@ -95,8 +95,15 @@ export default function App() {
 
   // URL debounce → scan
   useEffect(() => {
-    const isYoutube = (s) => s.includes('youtube.com/') || s.includes('youtu.be/');
-    if (isYoutube(url)) {
+    const isWebUrl = (s) => {
+      try {
+        const u = new URL(s);
+        return u.protocol === 'http:' || u.protocol === 'https:';
+      } catch (_) {
+        return false;
+      }
+    };
+    if (isWebUrl(url)) {
       const t = setTimeout(() => handleScanInfo(url), 800);
       return () => clearTimeout(t);
     } else {
@@ -627,11 +634,12 @@ export default function App() {
           <input
             type="text"
             className="input-bar"
-            placeholder="Paste YouTube video link here..."
+            placeholder="Paste link from YouTube, Vimeo, TikTok, X, Soundcloud..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={isDownloading}
           />
+          <span className="input-hint">Supports YouTube, Vimeo, TikTok, Soundcloud, and 1000+ other media sources.</span>
         </div>
 
         <div className="input-group">

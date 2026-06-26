@@ -201,13 +201,44 @@ class Api:
                 seconds = duration_secs % 60
                 duration_str = f"{minutes:02d}:{seconds:02d}"
 
-                formats = [
-                    {'id': 'bestvideo+bestaudio/best', 'note': 'Best Quality (Default)'},
-                    {'id': 'bestvideo[height<=1080]+bestaudio/best', 'note': '1080p FHD'},
-                    {'id': 'bestvideo[height<=720]+bestaudio/best', 'note': '720p HD'},
-                    {'id': 'bestvideo[height<=480]+bestaudio/best', 'note': '480p SD'},
-                    {'id': 'bestaudio/best', 'note': 'Audio Only (MP3)'}
+                # Get max height and check if video stream is present
+                raw_formats = info.get('formats', []) or []
+                max_height = 0
+                has_video = False
+                for f in raw_formats:
+                    if f.get('vcodec') != 'none':
+                        has_video = True
+                    h = f.get('height')
+                    if h and isinstance(h, int):
+                        if h > max_height:
+                            max_height = h
+
+                formats = [{'id': 'bestvideo+bestaudio/best', 'note': 'Best Quality (Default)'}]
+                
+                candidates = [
+                    (4320, 'bestvideo[height<=4320]+bestaudio/best', '8K UHD (4320p)'),
+                    (2160, 'bestvideo[height<=2160]+bestaudio/best', '4K UHD (2160p)'),
+                    (1440, 'bestvideo[height<=1440]+bestaudio/best', '2K QHD (1440p)'),
+                    (1080, 'bestvideo[height<=1080]+bestaudio/best', '1080p FHD'),
+                    (720, 'bestvideo[height<=720]+bestaudio/best', '720p HD'),
+                    (480, 'bestvideo[height<=480]+bestaudio/best', '480p SD'),
+                    (360, 'bestvideo[height<=360]+bestaudio/best', '360p SD')
                 ]
+                
+                if max_height > 0:
+                    for h, fmt_id, note in candidates:
+                        if h <= max_height:
+                            formats.append({'id': fmt_id, 'note': note})
+                else:
+                    # Fallback for videos/sites where height is not resolved but video exists
+                    if has_video:
+                        formats.extend([
+                            {'id': 'bestvideo[height<=1080]+bestaudio/best', 'note': '1080p FHD'},
+                            {'id': 'bestvideo[height<=720]+bestaudio/best', 'note': '720p HD'},
+                            {'id': 'bestvideo[height<=480]+bestaudio/best', 'note': '480p SD'}
+                        ])
+
+                formats.append({'id': 'bestaudio/best', 'note': 'Audio Only (MP3)'})
 
                 return {
                     'success': True,
