@@ -17,6 +17,12 @@ class Api:
         self._window = None
         self._custom_ffmpeg_dir = None
         self._custom_ffmpeg_exe = None  # full path to ffmpeg executable
+        self._cancel_requested = False
+
+    def cancel_download(self):
+        """Signals the active download thread to abort."""
+        self._cancel_requested = True
+        return {'success': True}
 
     def _get_ffmpeg_name(self):
         return 'ffmpeg.exe' if sys.platform == 'win32' else 'ffmpeg'
@@ -216,6 +222,7 @@ class Api:
 
     def start_download(self, url, download_dir, format_id):
         """Launches video download in a separate thread."""
+        self._cancel_requested = False
         thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id))
         thread.daemon = True
         thread.start()
@@ -448,6 +455,8 @@ class Api:
             self._send_progress({'status': 'error', 'message': str(e)})
 
     def _progress_hook(self, d):
+        if self._cancel_requested:
+            raise Exception("Download cancelled by user")
         if d['status'] == 'downloading':
             downloaded = d.get('downloaded_bytes', 0)
             total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
@@ -479,6 +488,8 @@ class Api:
             })
 
     def _postprocessor_hook(self, d):
+        if self._cancel_requested:
+            raise Exception("Download cancelled by user")
         if d['status'] == 'started':
             self._send_progress({
                 'status': 'processing',

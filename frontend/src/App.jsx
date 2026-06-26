@@ -416,6 +416,20 @@ export default function App() {
     }
   };
 
+  const handleCancelDownload = async () => {
+    if (window.pywebview?.api) {
+      try {
+        await window.pywebview.api.cancel_download();
+        setProgress(prev => ({ ...prev, message: 'ABORTING TRANSMISSION...' }));
+      } catch (err) {
+        console.error('Cancel failed:', err);
+      }
+    } else {
+      setIsDownloading(false);
+      setError('Extraction aborted by user.');
+    }
+  };
+
   // Render helpers
   const renderProgressCard = () => (
     <div className="progress-card">
@@ -449,6 +463,11 @@ export default function App() {
           <span className="telemetry-val">{progress ? `${Math.round(progress.percent)}%` : '0%'}</span>
         </div>
       </div>
+      {dependencies.ffmpeg && (
+        <button className="cancel-btn" onClick={handleCancelDownload}>
+          ABORT EXTRACTION
+        </button>
+      )}
     </div>
   );
 
