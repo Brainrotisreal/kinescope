@@ -28,7 +28,7 @@ def main():
 
     # 2. Ensure PyInstaller and Pillow are installed in venv
     log("Verifying PyInstaller and Pillow dependencies...")
-    # subprocess.run([pip_exe, "install", "pyinstaller", "pillow"], check=True)
+    subprocess.run([pip_exe, "install", "pyinstaller", "pillow"], check=True)
 
     # 3. Generate Platform-Specific Icon if missing
     icon_ext = "ico" if sys.platform == "win32" else "icns"
