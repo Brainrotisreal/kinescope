@@ -28,7 +28,7 @@ def main():
 
     # 2. Ensure PyInstaller and Pillow are installed in venv
     log("Verifying PyInstaller and Pillow dependencies...")
-    subprocess.run([pip_exe, "install", "pyinstaller", "pillow"], check=True)
+    # subprocess.run([pip_exe, "install", "pyinstaller", "pillow"], check=True)
 
     # 3. Generate Platform-Specific Icon if missing
     icon_ext = "ico" if sys.platform == "win32" else "icns"
@@ -89,13 +89,16 @@ img.save(r"{icon_path}", format="ICNS")
     add_data_arg = f"frontend/dist{separator}frontend/dist"
     
     cmd = [
-        pyinstaller_exe,
+        python_exe,
+        "-m",
+        "PyInstaller",
         "--noconfirm",
         "--onefile",
         "--windowed",
         "--name=Kinescope",
         f"--add-data={add_data_arg}",
-        "--collect-all=webview"
+        "--collect-all=webview",
+        "--collect-all=gallery_dl"
     ]
     
     if sys.platform == "win32":

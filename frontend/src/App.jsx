@@ -4,11 +4,10 @@ export default function App() {
   const [url, setUrl] = useState('');
   const [downloadDir, setDownloadDir] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('bestvideo+bestaudio/best');
+  const [writeThumbnail, setWriteThumbnail] = useState(false);
+  const [isGallery, setIsGallery] = useState(false);
 
   const [videoInfo, setVideoInfo] = useState(null);
-  const [dependencies, setDependencies] = useState({ ffmpeg: true, ffmpeg_path: null, yt_dlp: true });
-  const [ffmpegInstallDir, setFfmpegInstallDir] = useState('');
-  const [ffmpegError, setFfmpegError] = useState('');
 
   const [isLoadingInfo, setIsLoadingInfo] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -22,17 +21,6 @@ export default function App() {
   const completionPhaseRef = useRef(null); // 'noise' | 'lock' | 'hold' | null
   const completionStartTimeRef = useRef(0);
 
-  const recheckDeps = async () => {
-    if (window.pywebview?.api) {
-      try {
-        const deps = await window.pywebview.api.check_dependencies();
-        setDependencies(deps);
-      } catch (err) {
-        console.error('Failed to recheck dependencies:', err);
-      }
-    }
-  };
-
   const resetToIdle = () => {
     setCompletionState(null);
     setCompletionText('');
@@ -40,28 +28,25 @@ export default function App() {
     setVideoInfo(null);
     setProgress(null);
     setError('');
+    setWriteThumbnail(false);
+    setIsGallery(false);
   };
 
-  // Mount: initialize, check deps, load settings
+  // Mount: initialize, load settings
   useEffect(() => {
     async function init() {
       if (window.pywebview?.api) {
         try {
-          const [defaultDir, deps, defaultFfmpegDir, settings] = await Promise.all([
+          const [defaultDir, settings] = await Promise.all([
             window.pywebview.api.get_default_download_dir(),
-            window.pywebview.api.check_dependencies(),
-            window.pywebview.api.get_default_ffmpeg_dir(),
             window.pywebview.api.load_settings(),
           ]);
           setDownloadDir(settings.download_dir || defaultDir);
-          setDependencies(deps);
-          setFfmpegInstallDir(defaultFfmpegDir);
         } catch (err) {
           setError('Failed to initialize: ' + err.message);
         }
       } else {
         setDownloadDir('C:\\Users\\MockUser\\Downloads');
-        setFfmpegInstallDir('C:\\Users\\MockUser\\AppData\\Local\\Kinescope\\bin');
       }
     }
 
@@ -83,11 +68,9 @@ export default function App() {
         if (data.ffmpeg_path && window.pywebview?.api) {
           window.pywebview.api.save_setting('ffmpeg_path', data.ffmpeg_path);
         }
-        recheckDeps();
       } else if (data.status === 'error') {
         setIsDownloading(false);
         setError(data.message);
-        recheckDeps();
       }
     };
     return () => { delete window.onDownloadProgress; };
@@ -287,11 +270,14 @@ export default function App() {
   const handleScanInfo = async (scanUrl) => {
     setError('');
     setIsLoadingInfo(true);
+    setWriteThumbnail(false);
+    setIsGallery(false);
     if (window.pywebview?.api) {
       try {
         const info = await window.pywebview.api.get_video_info(scanUrl);
         if (info.success) {
           setVideoInfo(info);
+          setIsGallery(!!info.is_gallery);
           setSelectedFormat(info.formats?.[0]?.id ?? 'bestvideo+bestaudio/best');
         } else {
           setError(info.error || 'Failed to scan URL metadata.');
@@ -303,17 +289,33 @@ export default function App() {
       }
     } else {
       setTimeout(() => {
-        setVideoInfo({
-          title: 'Vaporwave Archival Broadcast [1989]',
-          uploader: 'SynthWave Collective',
-          duration: '04:20',
-          thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
-          formats: [
-            { id: 'bestvideo+bestaudio/best', note: 'Best Quality (Default)' },
-            { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
-            { id: 'bestaudio/best', note: 'Audio Only (MP3)' }
-          ]
-        });
+        const mockIsGallery = scanUrl.includes('imgur') || scanUrl.includes('flickr') || scanUrl.includes('gallery');
+        if (mockIsGallery) {
+          setVideoInfo({
+            title: 'Image/Gallery Stream',
+            uploader: 'Platform Extractor',
+            duration: 'N/A',
+            thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
+            is_gallery: true,
+            formats: []
+          });
+          setIsGallery(true);
+          setSelectedFormat('');
+        } else {
+          setVideoInfo({
+            title: 'Vaporwave Archival Broadcast [1989]',
+            uploader: 'SynthWave Collective',
+            duration: '04:20',
+            thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
+            formats: [
+              { id: 'bestvideo+bestaudio/best', note: 'Best Quality (Default)' },
+              { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
+              { id: 'bestaudio/best', note: 'Audio Only (MP3)' }
+            ]
+          });
+          setIsGallery(false);
+          setSelectedFormat('bestvideo+bestaudio/best');
+        }
         setIsLoadingInfo(false);
       }, 1000);
     }
@@ -340,7 +342,7 @@ export default function App() {
     setProgress({ status: 'starting', percent: 0, message: 'Contacting host stream...' });
     if (window.pywebview?.api) {
       try {
-        await window.pywebview.api.start_download(url, downloadDir, selectedFormat);
+        await window.pywebview.api.start_download(url, downloadDir, selectedFormat, writeThumbnail);
       } catch (err) {
         setError('Extraction trigger failed: ' + err.message);
         setIsDownloading(false);
@@ -350,7 +352,16 @@ export default function App() {
       let pct = 0;
       const interval = setInterval(() => {
         pct += 10;
-        setProgress({ status: 'downloading', percent: pct, speed: '12.4 MB/s', eta: `00:${10 - pct / 10}`, downloaded: `${pct} MB`, total: '100 MB', filename: 'vaporwave_broadcast.mp4' });
+        setProgress({
+          status: 'downloading',
+          percent: pct,
+          speed: '12.4 MB/s',
+          eta: `00:${10 - pct / 10}`,
+          downloaded: `${pct} MB`,
+          total: '100 MB',
+          filename: isGallery ? 'gallery_image.jpg' : 'vaporwave_broadcast.mp4',
+          message: isGallery ? `Extracting gallery item ${Math.floor(pct / 20) + 1}...` : 'Downloading video...'
+        });
         if (pct >= 100) {
           clearInterval(interval);
           setProgress({ status: 'merging', percent: 100, message: 'Processing stream components...' });
@@ -359,69 +370,15 @@ export default function App() {
             setCompletionState('animating');
             setUrl('');
             setVideoInfo(null);
+            setWriteThumbnail(false);
+            setIsGallery(false);
           }, 1500);
         }
       }, 500);
     }
   };
 
-  const handleBrowseFfmpegDir = async () => {
-    if (window.pywebview?.api) {
-      try {
-        const path = await window.pywebview.api.select_folder();
-        if (path) setFfmpegInstallDir(path);
-      } catch (err) {
-        setFfmpegError('Folder picker failed: ' + err.message);
-      }
-    }
-  };
 
-  const handleSelectFfmpegExe = async () => {
-    if (!window.pywebview?.api) return;
-    setFfmpegError('');
-    try {
-      const path = await window.pywebview.api.select_file();
-      if (!path) return;
-      const result = await window.pywebview.api.validate_ffmpeg_exe(path);
-      if (result.valid) {
-        await window.pywebview.api.save_setting('ffmpeg_path', path);
-        await recheckDeps();
-      } else {
-        setFfmpegError(result.error || 'Not a valid FFmpeg executable.');
-      }
-    } catch (err) {
-      setFfmpegError('Selection failed: ' + err.message);
-    }
-  };
-
-  const handleInstallFfmpeg = async () => {
-    setFfmpegError('');
-    setIsDownloading(true);
-    setProgress({ status: 'downloading', percent: 0, speed: '0.0 MB/s', downloaded: '0.0 MB', total: '~50 MB', filename: 'ffmpeg.zip', message: 'Contacting GitHub to download FFmpeg...' });
-    if (window.pywebview?.api) {
-      try {
-        await window.pywebview.api.install_ffmpeg(ffmpegInstallDir);
-      } catch (err) {
-        setError('FFmpeg install failed: ' + err.message);
-        setIsDownloading(false);
-      }
-    } else {
-      let pct = 0;
-      const interval = setInterval(() => {
-        pct += 20;
-        setProgress({ status: 'downloading', percent: pct, speed: '4.8 MB/s', downloaded: `${(50 * pct) / 100} MB`, total: '50 MB', filename: 'ffmpeg.zip', message: 'Downloading FFmpeg binary (Mock)...' });
-        if (pct >= 100) {
-          clearInterval(interval);
-          setProgress({ status: 'merging', percent: 100, message: 'Extracting zip components...' });
-          setTimeout(() => {
-            setIsDownloading(false);
-            setCompletionState('animating');
-            setDependencies({ ffmpeg: true, ffmpeg_path: 'C:\\mock\\bin\\ffmpeg.exe', yt_dlp: true });
-          }, 1500);
-        }
-      }, 400);
-    }
-  };
 
   const handleCancelDownload = async () => {
     if (window.pywebview?.api) {
@@ -470,54 +427,9 @@ export default function App() {
           <span className="telemetry-val">{progress ? `${Math.round(progress.percent)}%` : '0%'}</span>
         </div>
       </div>
-      {dependencies.ffmpeg && (
-        <button className="cancel-btn" onClick={handleCancelDownload}>
-          ABORT EXTRACTION
-        </button>
-      )}
-    </div>
-  );
-
-  const renderFfmpegPanel = () => (
-    <div className="ffmpeg-panel">
-      <div className="ffmpeg-panel-header">
-        <span className="status-indicator warning" style={{ width: '5px', height: '5px', flexShrink: 0 }}></span>
-        <span>FFMPEG NOT DETECTED</span>
-      </div>
-      <div className="ffmpeg-panel-body">
-        <div className="ffmpeg-option">
-          <div className="ffmpeg-option-label">HAVE FFMPEG?</div>
-          <button className="browse-btn ffmpeg-opt-btn" onClick={handleSelectFfmpegExe}>
-            BROWSE .EXE
-          </button>
-          <div className="ffmpeg-option-hint">Point to existing ffmpeg.exe</div>
-        </div>
-        <div className="ffmpeg-divider">OR</div>
-        <div className="ffmpeg-option">
-          <div className="ffmpeg-option-label">AUTO-INSTALL</div>
-          <button className="banner-action-btn ffmpeg-opt-btn" onClick={handleInstallFfmpeg}>
-            DOWNLOAD
-          </button>
-          <div className="ffmpeg-option-hint">INSTALL TO:</div>
-          <div className="directory-row" style={{ width: '100%' }}>
-            <button
-              className="browse-btn"
-              onClick={handleBrowseFfmpegDir}
-              style={{ fontSize: '0.55rem', padding: '0 8px', height: '26px' }}
-            >
-              DIR
-            </button>
-            <input
-              type="text"
-              className="input-bar"
-              value={ffmpegInstallDir}
-              onChange={(e) => setFfmpegInstallDir(e.target.value)}
-              style={{ fontSize: '0.62rem', padding: '2px 8px', height: '26px' }}
-            />
-          </div>
-        </div>
-      </div>
-      {ffmpegError && <div className="ffmpeg-error-line">{ffmpegError}</div>}
+      <button className="cancel-btn" onClick={handleCancelDownload}>
+        ABORT EXTRACTION
+      </button>
     </div>
   );
 
@@ -542,8 +454,6 @@ export default function App() {
       );
     }
 
-    if (!dependencies.ffmpeg) return renderFfmpegPanel();
-
     return (
       <>
         {error && (
@@ -551,26 +461,44 @@ export default function App() {
             <strong>FAULT //</strong> {error}
           </div>
         )}
-        {videoInfo?.formats && (
-          <div className="input-group">
-            <label className="input-label">DECRYPTION FORMAT</label>
-            <select
-              className="select-dropdown"
-              value={selectedFormat}
-              onChange={(e) => setSelectedFormat(e.target.value)}
-            >
-              {videoInfo.formats.map((f) => (
-                <option key={f.id} value={f.id}>{f.note}</option>
-              ))}
-            </select>
+        {isGallery && (
+          <div className="gallery-detected-banner">
+            IMAGE EXTRACTER ENGAGED
           </div>
+        )}
+        {!isGallery && videoInfo?.formats && videoInfo.formats.length > 0 && (
+          <>
+            <div className="input-group">
+              <label className="input-label">DECRYPTION FORMAT</label>
+              <select
+                className="select-dropdown"
+                value={selectedFormat}
+                onChange={(e) => setSelectedFormat(e.target.value)}
+              >
+                {videoInfo.formats.map((f) => (
+                  <option key={f.id} value={f.id}>{f.note}</option>
+                ))}
+              </select>
+            </div>
+            <div className="checkbox-row">
+              <label className="tactile-checkbox">
+                <input
+                  type="checkbox"
+                  checked={writeThumbnail}
+                  onChange={(e) => setWriteThumbnail(e.target.checked)}
+                />
+                <span className="checkbox-box"></span>
+                <span className="checkbox-text">EXTRACT THUMBNAIL</span>
+              </label>
+            </div>
+          </>
         )}
         <button
           className="engage-btn"
           disabled={!url || !downloadDir || isLoadingInfo}
           onClick={handleStartArchival}
         >
-          ENGAGE EXTRACTION
+          {isGallery ? 'ENGAGE IMAGE EXTRACTION' : 'ENGAGE VIDEO EXTRACTION'}
         </button>
       </>
     );
@@ -584,19 +512,7 @@ export default function App() {
           <h1 className="deck-title">KINESCOPE<span>//</span></h1>
           <span className="deck-subtitle">STREAM ARCHIVAL DECK</span>
         </div>
-        <div className="system-status-group">
-          <div className="system-status">
-            <span className={`status-indicator ${dependencies.ffmpeg ? 'ready' : 'warning'}`}></span>
-            <span className="status-label">
-              {dependencies.ffmpeg ? 'FFMPEG: ACTIVE' : 'FFMPEG: MISSING'}
-            </span>
-          </div>
-          {dependencies.ffmpeg && dependencies.ffmpeg_path && (
-            <div className="ffmpeg-path-label" title={dependencies.ffmpeg_path}>
-              {dependencies.ffmpeg_path}
-            </div>
-          )}
-        </div>
+
       </header>
 
       {/* Oscilloscope */}
@@ -630,16 +546,39 @@ export default function App() {
       {/* Input Deck */}
       <main className="control-deck">
         <div className="input-group">
-          <label className="input-label">BROADCAST SOURCE URL</label>
+          <div className="input-label-row">
+            <label className="input-label">BROADCAST SOURCE URL</label>
+            <div className="help-badge" tabIndex={0} aria-label="Supported sources">
+              <span className="help-icon">?</span>
+              <div className="help-tooltip" role="tooltip">
+                <div className="help-tooltip-title">SUPPORTED SOURCES</div>
+                <div className="help-tooltip-section">
+                  <span className="help-tooltip-tag video">VIDEO</span>
+                  YouTube, Vimeo, TikTok, Twitch, Soundcloud, and 1000+ sites via yt-dlp.
+                </div>
+                <div className="help-tooltip-section">
+                  <span className="help-tooltip-tag image">IMAGE</span>
+                  Imgur, Flickr, Twitter/X, Reddit, Instagram, Pixiv, DeviantArt, and 300+ image hosts via gallery-dl.
+                </div>
+                <div className="help-tooltip-hint">
+                  Paste any link — Kinescope detects the type automatically.
+                  <br />
+                  <span style={{ color: 'var(--color-amber)', display: 'block', marginTop: '4px' }}>
+                    Note: Spoilered or sensitive content on X/Twitter cannot be downloaded anonymously.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
           <input
             type="text"
             className="input-bar"
-            placeholder="Paste link from YouTube, Vimeo, TikTok, X, Soundcloud..."
+            placeholder="Paste video or image link..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={isDownloading}
           />
-          <span className="input-hint">Supports YouTube, Vimeo, TikTok, Soundcloud, and 1000+ other media sources.</span>
+          <span className="input-hint">Supports videos AND images — YouTube, Imgur, Flickr, Vimeo, X, Soundcloud, and 1000+ other sources.</span>
         </div>
 
         <div className="input-group">

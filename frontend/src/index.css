@@ -103,59 +103,7 @@ body {
   margin-top: 2px;
 }
 
-.system-status-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
 
-.system-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-color);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-}
-
-.ffmpeg-path-label {
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  color: var(--text-muted);
-  max-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: right;
-  cursor: default;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--text-muted);
-}
-
-.status-indicator.ready {
-  background-color: var(--color-green);
-  box-shadow: 0 0 8px var(--color-green);
-}
-
-.status-indicator.warning {
-  background-color: var(--color-amber);
-  box-shadow: 0 0 8px var(--color-amber);
-}
-
-.status-indicator.error {
-  background-color: var(--color-red);
-  box-shadow: 0 0 8px var(--color-red);
-}
 
 /* Oscilloscope Display Screen */
 .oscilloscope-card {
@@ -548,12 +496,7 @@ body {
   background-color: var(--color-amber);
 }
 
-.ffmpeg-install-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
+
 
 /* Animations */
 @keyframes pulse {
@@ -574,84 +517,7 @@ body {
   gap: 10px;
 }
 
-/* FFmpeg Panel — replaces the old warning banner */
-.ffmpeg-panel {
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  background-color: rgba(245, 158, 11, 0.04);
-  border-radius: 4px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-.ffmpeg-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--color-amber);
-  letter-spacing: 0.1em;
-}
-
-.ffmpeg-panel-body {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-}
-
-.ffmpeg-option {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 0 10px;
-}
-
-.ffmpeg-option:first-child {
-  border-right: 1px solid var(--border-color);
-}
-
-.ffmpeg-option-label {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.ffmpeg-opt-btn {
-  width: 100%;
-  justify-content: center;
-  height: 30px;
-  font-size: 0.65rem;
-}
-
-.ffmpeg-option-hint {
-  font-family: var(--font-mono);
-  font-size: 0.57rem;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.ffmpeg-divider {
-  display: flex;
-  align-items: center;
-  align-self: center;
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  color: var(--text-muted);
-  padding: 0 6px;
-}
-
-.ffmpeg-error-line {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  color: #fca5a5;
-  text-align: center;
-}
 
 /* Error strip inside action area */
 .action-error {
@@ -781,4 +647,207 @@ body {
   margin-top: 4px;
   letter-spacing: 0.05em;
   display: block;
+}
+
+/* Checkbox Row & Tactile Checkbox Styling */
+.checkbox-row {
+  margin-top: 10px;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.tactile-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.tactile-checkbox input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-input);
+  border-radius: 2px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.tactile-checkbox:hover .checkbox-box {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 6px var(--color-amber-glow);
+}
+
+.tactile-checkbox input[type="checkbox"]:checked + .checkbox-box {
+  background-color: var(--color-amber-solid);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 8px var(--color-amber-glow);
+}
+
+.tactile-checkbox input[type="checkbox"]:checked + .checkbox-box::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--text-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-text {
+  transition: color 0.2s ease;
+}
+
+.tactile-checkbox input[type="checkbox"]:checked ~ .checkbox-text {
+  color: var(--text-primary);
+}
+
+/* Gallery Detected Banner */
+.gallery-detected-banner {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--color-amber);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background-color: rgba(245, 158, 11, 0.05);
+  padding: 8px 12px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  margin-bottom: 12px;
+  text-shadow: 0 0 8px var(--color-amber-glow);
+}
+
+/* Input Label Row (label + help badge inline) */
+.input-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.input-label-row .input-label {
+  margin-bottom: 0;
+}
+
+/* Help Badge — the small ? circle */
+.help-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-control);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.help-badge:hover,
+.help-badge:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 6px var(--color-amber-glow);
+  outline: none;
+}
+
+.help-icon {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+  pointer-events: none;
+  transition: color 0.2s ease;
+}
+
+.help-badge:hover .help-icon,
+.help-badge:focus .help-icon {
+  color: var(--color-amber);
+}
+
+/* Help Tooltip Panel */
+.help-tooltip {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 100;
+  background-color: #12151e;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(245,158,11,0.1);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-badge:hover .help-tooltip,
+.help-badge:focus .help-tooltip {
+  display: flex;
+}
+
+.help-tooltip-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--color-amber);
+  margin-bottom: 6px;
+  text-shadow: 0 0 8px var(--color-amber-glow);
+}
+
+.help-tooltip-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.help-tooltip-tag {
+  flex-shrink: 0;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-top: 1px;
+}
+
+.help-tooltip-tag.video {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--color-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.help-tooltip-tag.image {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: var(--color-amber);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.help-tooltip-hint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 7px;
 }
