@@ -1,0 +1,26 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python caching and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# PyInstaller build directories and specs
+build/
+dist/
+*.spec
+icon.ico
+icon.icns
+
+# Node.js dependencies and builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Log files and local binaries downloaded at runtime
+*.log
+bin/

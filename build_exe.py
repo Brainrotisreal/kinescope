@@ -1,0 +1,130 @@
+import os
+import sys
+import subprocess
+import shutil
+
+def log(msg):
+    print(f"[KINESCOPE COMPILER] {msg}")
+
+def main():
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 1. Verify paths and executable locations based on Platform
+    venv_dir = os.path.join(root_dir, ".venv")
+    if sys.platform == "win32":
+        pip_exe = os.path.join(venv_dir, "Scripts", "pip.exe")
+        python_exe = os.path.join(venv_dir, "Scripts", "python.exe")
+        pyinstaller_exe = os.path.join(venv_dir, "Scripts", "pyinstaller.exe")
+        npm_cmd = "npm.cmd"
+    else:
+        pip_exe = os.path.join(venv_dir, "bin", "pip")
+        python_exe = os.path.join(venv_dir, "bin", "python")
+        pyinstaller_exe = os.path.join(venv_dir, "bin", "pyinstaller")
+        npm_cmd = "npm"
+
+    if not os.path.exists(venv_dir):
+        log("Virtual environment not found. Please run run.py first to initialize!")
+        sys.exit(1)
+
+    # 2. Ensure PyInstaller and Pillow are installed in venv
+    log("Verifying PyInstaller and Pillow dependencies...")
+    subprocess.run([pip_exe, "install", "pyinstaller", "pillow"], check=True)
+
+    # 3. Generate Platform-Specific Icon if missing
+    icon_ext = "ico" if sys.platform == "win32" else "icns"
+    icon_file = f"icon.{icon_ext}"
+    icon_path = os.path.join(root_dir, icon_file)
+    
+    if not os.path.exists(icon_path):
+        source_png = os.path.join(root_dir, "backend", "icon.png")
+        if os.path.exists(source_png):
+            log(f"Generating custom {icon_file} from backend/icon.png...")
+            if icon_ext == "ico":
+                # Multi-size windows ICO generator
+                generator_code = f"""
+from PIL import Image
+img = Image.open(r"{source_png}")
+img.save(r"{icon_path}", format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+"""
+            else:
+                # macOS ICNS generator
+                generator_code = f"""
+from PIL import Image
+img = Image.open(r"{source_png}")
+img.save(r"{icon_path}", format="ICNS")
+"""
+            subprocess.run([python_exe, "-c", generator_code], check=True)
+            log("Icon generated successfully.")
+        else:
+            log("Warning: backend/icon.png not found. Falling back on default icon.")
+
+    # 4. Compile React assets
+    frontend_dir = os.path.join(root_dir, "frontend")
+    log("Compiling React static assets...")
+    subprocess.run([npm_cmd, "run", "build"], cwd=frontend_dir, shell=True, check=True)
+    log("React assets compiled successfully.")
+
+    # 5. Clean up old build outputs
+    for folder in ['build', 'dist']:
+        path = os.path.join(root_dir, folder)
+        if os.path.exists(path):
+            log(f"Clearing old {folder} directory...")
+            try:
+                shutil.rmtree(path)
+            except Exception as e:
+                log(f"Warning: Could not clear {folder}: {e}")
+            
+    spec_file = os.path.join(root_dir, "Kinescope.spec")
+    if os.path.exists(spec_file):
+        try:
+            os.remove(spec_file)
+        except Exception as e:
+            log(f"Warning: Could not delete spec file: {e}")
+
+    # 6. Run PyInstaller
+    log("Invoking PyInstaller to bundle Kinescope...")
+    
+    # Configure cross-platform data delimiters
+    separator = ';' if sys.platform == "win32" else ":"
+    add_data_arg = f"frontend/dist{separator}frontend/dist"
+    
+    cmd = [
+        pyinstaller_exe,
+        "--noconfirm",
+        "--onefile",
+        "--windowed",
+        "--name=Kinescope",
+        f"--add-data={add_data_arg}",
+        "--collect-all=webview"
+    ]
+    
+    if sys.platform == "win32":
+        cmd.append("--collect-all=clr")
+        cmd.append("--collect-all=pythonnet")
+    
+    # Append icon argument if generated successfully
+    if os.path.exists(icon_path):
+        cmd.append(f"--icon={icon_path}")
+        
+    cmd.append(os.path.join(root_dir, "backend", "main.py"))
+    
+    log(f"Executing: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+    
+    # 7. Report compilation result
+    if sys.platform == "win32":
+        compiled_path = os.path.join(root_dir, "dist", "Kinescope.exe")
+    else:
+        compiled_path = os.path.join(root_dir, "dist", "Kinescope.app")
+        
+    if os.path.exists(compiled_path):
+        log("====================================================")
+        log("STANDALONE BUNDLE BUILD SUCCESSFUL!")
+        log(f"Portable app is located at: {compiled_path}")
+        log("====================================================")
+    else:
+        log("Compilation complete, but output was not found in dist/.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

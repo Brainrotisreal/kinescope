@@ -1,0 +1,105 @@
+name: Build Kinescope
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python Virtual Environment (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          python -m venv .venv
+          .venv\Scripts\pip install --upgrade pip
+          .venv\Scripts\pip install -r backend\requirements.txt
+        shell: cmd
+
+      - name: Setup Python Virtual Environment (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r backend/requirements.txt
+        shell: bash
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Build Script (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          .venv\Scripts\python build_exe.py
+        shell: cmd
+
+      - name: Run Build Script (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          .venv/bin/python build_exe.py
+        shell: bash
+
+      - name: Package macOS App
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          zip -r Kinescope.app.zip Kinescope.app
+        shell: bash
+
+      - name: Upload Windows Binary Artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kinescope-Windows
+          path: dist/Kinescope.exe
+
+      - name: Upload macOS App Artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kinescope-macOS
+          path: dist/Kinescope.app.zip
+
+      - name: Release Assets (Windows)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Kinescope.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Assets (macOS)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Kinescope.app.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
