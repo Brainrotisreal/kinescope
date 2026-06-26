@@ -61,7 +61,7 @@ img.save(r"{icon_path}", format="ICNS")
     # 4. Compile React assets
     frontend_dir = os.path.join(root_dir, "frontend")
     log("Compiling React static assets...")
-    subprocess.run([npm_cmd, "run", "build"], cwd=frontend_dir, shell=True, check=True)
+    subprocess.run(f"{npm_cmd} run build", cwd=frontend_dir, shell=True, check=True)
     log("React assets compiled successfully.")
 
     # 5. Clean up old build outputs

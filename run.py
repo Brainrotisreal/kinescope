@@ -46,12 +46,12 @@ def main():
         node_modules = os.path.join(frontend_dir, "node_modules")
         if not os.path.exists(node_modules):
             log("Installing Node dependencies...")
-            subprocess.run([npm_cmd, "install"], cwd=frontend_dir, shell=True, check=True)
+            subprocess.run(f"{npm_cmd} install", cwd=frontend_dir, shell=True, check=True)
         
         # Start Vite dev server as background process
         log("Launching Vite dev server...")
         vite_proc = subprocess.Popen(
-            [npm_cmd, "run", "dev"], 
+            f"{npm_cmd} run dev", 
             cwd=frontend_dir, 
             shell=True,
             stdout=subprocess.DEVNULL,
@@ -81,11 +81,11 @@ def main():
             node_modules = os.path.join(frontend_dir, "node_modules")
             if not os.path.exists(node_modules):
                 log("Installing Node dependencies...")
-                subprocess.run([npm_cmd, "install"], cwd=frontend_dir, shell=True, check=True)
+                subprocess.run(f"{npm_cmd} install", cwd=frontend_dir, shell=True, check=True)
                 
             # Build React app
             log("Compiling static assets...")
-            subprocess.run([npm_cmd, "run", "build"], cwd=frontend_dir, shell=True, check=True)
+            subprocess.run(f"{npm_cmd} run build", cwd=frontend_dir, shell=True, check=True)
             log("Frontend assets built successfully.")
             
         # Launch Python backend in production mode pointing to built index.html
