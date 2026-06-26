@@ -93,6 +93,12 @@ class Api:
             if system_ffmpeg:
                 ffmpeg_path = system_ffmpeg
 
+        # 2.5 Bundled PyInstaller temp folder
+        if not ffmpeg_path and getattr(sys, 'frozen', False):
+            temp_bin = os.path.join(sys._MEIPASS, 'bin', ffmpeg_name)
+            if os.path.exists(temp_bin):
+                ffmpeg_path = temp_bin
+
         # 3. Default local bin folder
         if not ffmpeg_path:
             local = os.path.join(self._get_bin_dir(), ffmpeg_name)
@@ -225,8 +231,10 @@ class Api:
 
     def _download_direct_binary(self, url, dest_path, name, progress_range):
         start_pct, end_pct = progress_range
+        import ssl
+        context = ssl._create_unverified_context()
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, context=context) as response:
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
             block_size = 512 * 1024
@@ -311,8 +319,10 @@ class Api:
             url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
             bin_names = ['ffmpeg.exe', 'ffprobe.exe']
 
+            import ssl
+            context = ssl._create_unverified_context()
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=context) as response:
                 total_size = int(response.headers.get('content-length', 0))
                 downloaded = 0
                 block_size = 512 * 1024
@@ -398,13 +408,19 @@ class Api:
                 'no_warnings': True,
             }
 
-            # Find ffmpeg: settings exe → system PATH → default bin → custom session dir
+            # Find ffmpeg: settings exe → system PATH → bundled bin → default bin → custom session dir
             ffmpeg_dir = None
             ffmpeg_name = self._get_ffmpeg_name()
+            
+            # Check temp folder if bundled
+            bundled_bin = None
+            if getattr(sys, 'frozen', False):
+                bundled_bin = os.path.join(sys._MEIPASS, 'bin')
+
             if self._custom_ffmpeg_exe and os.path.exists(self._custom_ffmpeg_exe):
                 ffmpeg_dir = os.path.dirname(self._custom_ffmpeg_exe)
             elif not shutil.which('ffmpeg'):
-                for candidate in [self._get_bin_dir(), self._custom_ffmpeg_dir]:
+                for candidate in [bundled_bin, self._get_bin_dir(), self._custom_ffmpeg_dir]:
                     if candidate and os.path.exists(os.path.join(candidate, ffmpeg_name)):
                         ffmpeg_dir = candidate
                         break

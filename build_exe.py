@@ -101,6 +101,12 @@ img.save(r"{icon_path}", format="ICNS")
     if sys.platform == "win32":
         cmd.append("--collect-all=clr")
         cmd.append("--collect-all=pythonnet")
+        
+    # Bundle local bin directory if it exists (e.g. prepared by CI/CD)
+    bin_dir_path = os.path.join(root_dir, "bin")
+    if os.path.exists(bin_dir_path):
+        log("Local bin/ directory detected. Bundling FFmpeg binaries into executable...")
+        cmd.append(f"--add-data=bin{separator}bin")
     
     # Append icon argument if generated successfully
     if os.path.exists(icon_path):
