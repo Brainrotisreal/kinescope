@@ -178,7 +178,8 @@ class Api:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': False
+                'extract_flat': False,
+                'nocheckcertificate': True
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -406,6 +407,7 @@ class Api:
                 'noprogress': True,
                 'quiet': True,
                 'no_warnings': True,
+                'nocheckcertificate': True
             }
 
             # Find ffmpeg: settings exe → system PATH → bundled bin → default bin → custom session dir
