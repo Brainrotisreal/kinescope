@@ -53,3 +53,12 @@ python build_exe.py
 This repository includes a GitHub Actions workflow (`.github/workflows/build.yml`) that automatically compiles release-ready binaries for both platforms:
 1. Triggers on any pushes to the `main` or `master` branch.
 2. If you push a tag starting with `v` (e.g. `v1.0.0`), it will compile and automatically upload the Windows `.exe` and a zipped macOS `.app` bundle directly as assets to a new GitHub Release.
+
+## License & Attribution
+
+Kinescope is released under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for the full text.
+
+### Third-Party Software Attribution
+This project packages the following third-party software in its binary releases:
+- **[FFmpeg](https://ffmpeg.org)**: A complete, cross-platform solution to record, convert and stream audio and video. FFmpeg is licensed under the GPL/LGPL. Kinescope packages pre-compiled GPL static builds of FFmpeg and FFprobe from [yt-dlp/FFmpeg-Builds](https://github.com/yt-dlp/FFmpeg-Builds) and [shaka-project/static-ffmpeg-binaries](https://github.com/shaka-project/static-ffmpeg-binaries). The official FFmpeg source code can be downloaded from [ffmpeg.org/download.html](https://ffmpeg.org/download.html).
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)**: A feature-rich command-line video downloader, licensed under the Unlicense (public domain).
