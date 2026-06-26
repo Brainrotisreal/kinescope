@@ -168,6 +168,8 @@ body {
   box-shadow: var(--shadow-inset);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
 }
 
 .oscilloscope-canvas {
@@ -205,6 +207,8 @@ body {
   align-items: center;
   gap: 16px;
   flex-grow: 1;
+  min-width: 0;
+  width: 100%;
 }
 
 .thumbnail-frame {
@@ -239,6 +243,7 @@ body {
   gap: 4px;
   flex-grow: 1;
   min-width: 0; /* allows text overflow ellipsis */
+  width: 0; /* forces browser to compute width from flex parent instead of content */
 }
 
 .meta-title {
@@ -249,6 +254,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .meta-uploader {
@@ -258,6 +264,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .meta-duration {
