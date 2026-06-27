@@ -98,7 +98,6 @@ img.save(r"{icon_path}", format="ICNS")
         "--name=Kinescope",
         f"--add-data={add_data_arg}",
         "--collect-all=webview",
-        "--collect-all=gallery_dl",
         "--collect-all=yt_dlp"
     ]
     

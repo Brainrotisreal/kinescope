@@ -8,42 +8,9 @@ import zipfile
 import io
 import shutil
 import time
-import logging
 import webview
 from webview import FileDialog
 import yt_dlp
-
-try:
-    from gallery_dl import config as gallery_config, job as gallery_job, extractor as gallery_extractor
-except ImportError:
-    gallery_config = None
-    gallery_job = None
-    gallery_extractor = None
-
-class GalleryDlLogHandler(logging.Handler):
-    def __init__(self, progress_callback, api_instance):
-        super().__init__()
-        self.progress_callback = progress_callback
-        self.api_instance = api_instance
-        self.downloaded_count = 0
-        
-    def emit(self, record):
-        if self.api_instance and self.api_instance._cancel_requested:
-            raise SystemExit("Download cancelled by user")
-        try:
-            msg = self.format(record)
-            lower_msg = msg.lower()
-            if any(ext in lower_msg for ext in ['.jpg', '.png', '.gif', '.jpeg', '.webp']) and (" -> " in msg or "download" in lower_msg or "writing" in lower_msg or "extract" in lower_msg):
-                self.downloaded_count += 1
-                self.progress_callback({
-                    'status': 'downloading',
-                    'percent': 50,
-                    'message': f"Extracting gallery item {self.downloaded_count}..."
-                })
-        except SystemExit:
-            raise
-        except Exception:
-            pass
 
 class Api:
     def __init__(self):
@@ -211,34 +178,9 @@ class Api:
         """Returns the system default Downloads folder."""
         return os.path.join(os.path.expanduser('~'), 'Downloads')
 
-    def is_gallery_url(self, url):
-        """Checks if a URL is supported by gallery-dl."""
-        if not gallery_extractor:
-            return False
-        # Prevent video domains from routing to gallery-dl
-        video_domains = ['youtube.com', 'youtu.be', 'vimeo.com', 'twitch.tv']
-        if any(domain in url.lower() for domain in video_domains):
-            return False
-        try:
-            return gallery_extractor.find(url) is not None
-        except Exception:
-            return False
-
     def get_video_info(self, url):
         """Extracts video metadata without downloading."""
         try:
-            # Check if it is a gallery URL
-            if self.is_gallery_url(url):
-                return {
-                    'success': True,
-                    'title': 'Image/Gallery Stream',
-                    'uploader': 'Platform Extractor',
-                    'duration': 'N/A',
-                    'thumbnail': '',
-                    'is_gallery': True,
-                    'formats': []
-                }
-
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
@@ -309,10 +251,10 @@ class Api:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def start_download(self, url, download_dir, format_id, write_thumbnail=False, thumbnail_only=False):
+    def start_download(self, url, download_dir, format_id):
         """Launches video download in a separate thread."""
         self._cancel_requested = False
-        thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id, write_thumbnail, thumbnail_only))
+        thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id))
         thread.daemon = True
         thread.start()
         return {'status': 'started'}
@@ -489,56 +431,10 @@ class Api:
                 'message': f"FFmpeg download failed: {str(e)}"
             })
 
-    def _download_worker(self, url, download_dir, format_id, write_thumbnail=False, thumbnail_only=False):
-        """Worker thread that executes the yt-dlp download or gallery-dl extraction."""
+    def _download_worker(self, url, download_dir, format_id):
+        """Worker thread that executes the yt-dlp download."""
         try:
             self._send_progress({'status': 'starting', 'message': 'Initializing extraction...'})
-
-            if self.is_gallery_url(url):
-                if not gallery_job:
-                    raise Exception("gallery-dl is not available.")
-                
-                # Load configurations
-                gallery_config.load()
-                # Set output directory (convert backslashes to forward slashes for gallery-dl safety)
-                safe_dir = download_dir.replace('\\', '/')
-                gallery_config.set(("extractor",), "base-directory", safe_dir)
-
-                # --- Flat directory structure ---
-                # Setting directory to [] prevents gallery-dl from creating
-                # subdirectories like twitter/username/ inside the destination.
-                gallery_config.set(("extractor",), "directory", [])
-
-                # Fallback for any missing metadata key (avoids KeyError in templates)
-                gallery_config.set(("extractor",), "keywords-default", "unknown")
-
-                # --- Flat filename templates per site ---
-                # Format: <site>_<creator>_<id>.<ext>  (exactly what the user requested)
-                gallery_config.set(("extractor", "twitter"),  "filename", "twitter_{author[name]}_{tweet_id}_{num}.{extension}")
-                gallery_config.set(("extractor", "x"),        "filename", "x_{author[name]}_{tweet_id}_{num}.{extension}")
-                gallery_config.set(("extractor", "imgur"),    "filename", "imgur_{user}_{id}.{extension}")
-                gallery_config.set(("extractor", "flickr"),   "filename", "flickr_{owner}_{id}.{extension}")
-                gallery_config.set(("extractor", "reddit"),   "filename", "reddit_{author}_{id}_{num}.{extension}")
-                gallery_config.set(("extractor", "instagram"),"filename", "instagram_{owner}_{shortcode}_{num}.{extension}")
-                gallery_config.set(("extractor", "pixiv"),    "filename", "pixiv_{user[name]}_{id}_{num}.{extension}")
-                gallery_config.set(("extractor", "deviantart"),"filename","deviantart_{author[username]}_{index}.{extension}")
-                # Global fallback for any other site
-                gallery_config.set(("extractor",), "filename", "{category}_{id}_{num:?_//}.{extension}")
-
-                # Add log handler
-                logger = logging.getLogger("gallery_dl")
-                logger.setLevel(logging.INFO)
-                handler = GalleryDlLogHandler(self._send_progress, self)
-                logger.addHandler(handler)
-                
-                try:
-                    job = gallery_job.DownloadJob(url)
-                    job.run()
-                finally:
-                    logger.removeHandler(handler)
-                
-                self._send_progress({'status': 'completed', 'percent': 100, 'message': 'Archival complete!'})
-                return
 
             is_audio_only = format_id == 'bestaudio/best'
 
@@ -581,11 +477,6 @@ class Api:
             else:
                 ydl_opts['format'] = format_id
                 ydl_opts['merge_output_format'] = 'mp4'
-
-            if write_thumbnail or thumbnail_only:
-                ydl_opts['writethumbnail'] = True
-            if thumbnail_only:
-                ydl_opts['skip_download'] = True
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])

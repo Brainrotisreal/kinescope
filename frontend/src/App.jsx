@@ -4,9 +4,6 @@ export default function App() {
   const [url, setUrl] = useState('');
   const [downloadDir, setDownloadDir] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('bestvideo+bestaudio/best');
-  const [writeThumbnailOnly, setWriteThumbnailOnly] = useState(false);
-  const [writeThumbnailWithVideo, setWriteThumbnailWithVideo] = useState(false);
-  const [isGallery, setIsGallery] = useState(false);
 
   const [videoInfo, setVideoInfo] = useState(null);
 
@@ -29,9 +26,6 @@ export default function App() {
     setVideoInfo(null);
     setProgress(null);
     setError('');
-    setWriteThumbnailOnly(false);
-    setWriteThumbnailWithVideo(false);
-    setIsGallery(false);
   };
 
   // Mount: initialize, load settings
@@ -272,15 +266,11 @@ export default function App() {
   const handleScanInfo = async (scanUrl) => {
     setError('');
     setIsLoadingInfo(true);
-    setWriteThumbnailOnly(false);
-    setWriteThumbnailWithVideo(false);
-    setIsGallery(false);
     if (window.pywebview?.api) {
       try {
         const info = await window.pywebview.api.get_video_info(scanUrl);
         if (info.success) {
           setVideoInfo(info);
-          setIsGallery(!!info.is_gallery);
           setSelectedFormat(info.formats?.[0]?.id ?? 'bestvideo+bestaudio/best');
         } else {
           setError(info.error || 'Failed to scan URL metadata.');
@@ -292,33 +282,18 @@ export default function App() {
       }
     } else {
       setTimeout(() => {
-        const mockIsGallery = scanUrl.includes('imgur') || scanUrl.includes('flickr') || scanUrl.includes('gallery');
-        if (mockIsGallery) {
-          setVideoInfo({
-            title: 'Image/Gallery Stream',
-            uploader: 'Platform Extractor',
-            duration: 'N/A',
-            thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
-            is_gallery: true,
-            formats: []
-          });
-          setIsGallery(true);
-          setSelectedFormat('');
-        } else {
-          setVideoInfo({
-            title: 'Vaporwave Archival Broadcast [1989]',
-            uploader: 'SynthWave Collective',
-            duration: '04:20',
-            thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
-            formats: [
-              { id: 'bestvideo+bestaudio/best', note: 'Best Quality (Default)' },
-              { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
-              { id: 'bestaudio/best', note: 'Audio Only (MP3)' }
-            ]
-          });
-          setIsGallery(false);
-          setSelectedFormat('bestvideo+bestaudio/best');
-        }
+        setVideoInfo({
+          title: 'Vaporwave Archival Broadcast [1989]',
+          uploader: 'SynthWave Collective',
+          duration: '04:20',
+          thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=120&fit=crop',
+          formats: [
+            { id: 'bestvideo+bestaudio/best', note: 'Best Quality (Default)' },
+            { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
+            { id: 'bestaudio/best', note: 'Audio Only (MP3)' }
+          ]
+        });
+        setSelectedFormat('bestvideo+bestaudio/best');
         setIsLoadingInfo(false);
       }, 1000);
     }
@@ -345,13 +320,7 @@ export default function App() {
     setProgress({ status: 'starting', percent: 0, message: 'Contacting host stream...' });
     if (window.pywebview?.api) {
       try {
-        await window.pywebview.api.start_download(
-          url,
-          downloadDir,
-          selectedFormat,
-          writeThumbnailOnly || writeThumbnailWithVideo,
-          writeThumbnailOnly
-        );
+        await window.pywebview.api.start_download(url, downloadDir, selectedFormat);
       } catch (err) {
         setError('Extraction trigger failed: ' + err.message);
         setIsDownloading(false);
@@ -368,8 +337,8 @@ export default function App() {
           eta: `00:${10 - pct / 10}`,
           downloaded: `${pct} MB`,
           total: '100 MB',
-          filename: isGallery ? 'gallery_image.jpg' : 'vaporwave_broadcast.mp4',
-          message: isGallery ? `Extracting gallery item ${Math.floor(pct / 20) + 1}...` : 'Downloading video...'
+          filename: 'vaporwave_broadcast.mp4',
+          message: 'Downloading video...'
         });
         if (pct >= 100) {
           clearInterval(interval);
@@ -379,9 +348,6 @@ export default function App() {
             setCompletionState('animating');
             setUrl('');
             setVideoInfo(null);
-            setWriteThumbnailOnly(false);
-            setWriteThumbnailWithVideo(false);
-            setIsGallery(false);
           }, 1500);
         }
       }, 500);
@@ -471,59 +437,26 @@ export default function App() {
             <strong>FAULT //</strong> {error}
           </div>
         )}
-        {isGallery && (
-          <div className="gallery-detected-banner">
-            IMAGE EXTRACTER ENGAGED
+        {videoInfo?.formats && videoInfo.formats.length > 0 && (
+          <div className="input-group">
+            <label className="input-label">DECRYPTION FORMAT</label>
+            <select
+              className="select-dropdown"
+              value={selectedFormat}
+              onChange={(e) => setSelectedFormat(e.target.value)}
+            >
+              {videoInfo.formats.map((f) => (
+                <option key={f.id} value={f.id}>{f.note}</option>
+              ))}
+            </select>
           </div>
-        )}
-        {!isGallery && videoInfo?.formats && videoInfo.formats.length > 0 && (
-          <>
-            <div className="input-group">
-              <label className="input-label">DECRYPTION FORMAT</label>
-              <select
-                className="select-dropdown"
-                value={selectedFormat}
-                onChange={(e) => setSelectedFormat(e.target.value)}
-              >
-                {videoInfo.formats.map((f) => (
-                  <option key={f.id} value={f.id}>{f.note}</option>
-                ))}
-              </select>
-            </div>
-            <div className="checkbox-row">
-              <label className="tactile-checkbox">
-                <input
-                  type="checkbox"
-                  checked={writeThumbnailOnly}
-                  onChange={(e) => {
-                    setWriteThumbnailOnly(e.target.checked);
-                    if (e.target.checked) setWriteThumbnailWithVideo(false);
-                  }}
-                />
-                <span className="checkbox-box"></span>
-                <span className="checkbox-text">EXTRACT THUMBNAIL</span>
-              </label>
-              <label className="tactile-checkbox">
-                <input
-                  type="checkbox"
-                  checked={writeThumbnailWithVideo}
-                  onChange={(e) => {
-                    setWriteThumbnailWithVideo(e.target.checked);
-                    if (e.target.checked) setWriteThumbnailOnly(false);
-                  }}
-                />
-                <span className="checkbox-box"></span>
-                <span className="checkbox-text">EXTRACT THUMBNAIL WITH VIDEO</span>
-              </label>
-            </div>
-          </>
         )}
         <button
           className="engage-btn"
           disabled={!url || !downloadDir || isLoadingInfo}
           onClick={handleStartArchival}
         >
-          {isGallery ? 'ENGAGE IMAGE EXTRACTION' : 'ENGAGE VIDEO EXTRACTION'}
+          ENGAGE VIDEO EXTRACTION
         </button>
       </>
     );
@@ -578,19 +511,7 @@ export default function App() {
               <div className="help-tooltip" role="tooltip">
                 <div className="help-tooltip-title">SUPPORTED SOURCES</div>
                 <div className="help-tooltip-section">
-                  <span className="help-tooltip-tag video">VIDEO</span>
                   YouTube, Vimeo, TikTok, Twitch, Soundcloud, and 1000+ sites via yt-dlp.
-                </div>
-                <div className="help-tooltip-section">
-                  <span className="help-tooltip-tag image">IMAGE</span>
-                  Imgur, Flickr, Twitter/X, Reddit, Instagram, Pixiv, DeviantArt, and 300+ image hosts via gallery-dl.
-                </div>
-                <div className="help-tooltip-hint">
-                  Paste any link — Kinescope detects the type automatically.
-                  <br />
-                  <span style={{ color: 'var(--color-amber)', display: 'block', marginTop: '4px' }}>
-                    Note: Spoilered or sensitive content on X/Twitter cannot be downloaded anonymously.
-                  </span>
                 </div>
               </div>
             </div>
@@ -598,12 +519,12 @@ export default function App() {
           <input
             type="text"
             className="input-bar"
-            placeholder="Paste video or image link..."
+            placeholder="Paste video link..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={isDownloading}
           />
-          <span className="input-hint">Supports videos AND images — YouTube, Imgur, Flickr, Vimeo, X, Soundcloud, and 1000+ other sources.</span>
+          <span className="input-hint">YouTube, Vimeo, TikTok, Twitch, Soundcloud, and 1000+ other sources via yt-dlp.</span>
         </div>
 
         <div className="input-group">
