@@ -17,11 +17,16 @@ class Api:
         self._window = None
         self._custom_ffmpeg_dir = None
         self._custom_ffmpeg_exe = None  # full path to ffmpeg executable
-        self._cancel_requested = False
+        self._cancelled = set()         # job_ids asked to cancel
+        self._active_jobs = set()       # job_ids currently running
+        self._emit_lock = threading.Lock()  # serialize evaluate_js across worker threads
 
-    def cancel_download(self):
-        """Signals the active download thread to abort."""
-        self._cancel_requested = True
+    def cancel_download(self, job_id=None):
+        """Signals download thread(s) to abort. No job_id => halt every active job."""
+        if job_id is None:
+            self._cancelled |= set(self._active_jobs)
+        else:
+            self._cancelled.add(str(job_id))
         return {'success': True}
 
     def _get_ffmpeg_name(self):
@@ -59,13 +64,16 @@ class Api:
             return {
                 'ffmpeg_path': ffmpeg_path,
                 'download_dir': data.get('download_dir'),
+                'filename_template': data.get('filename_template', ''),
+                'cookies_browser': data.get('cookies_browser', ''),
+                'cookies_file': data.get('cookies_file', ''),
             }
         except Exception:
             return {'ffmpeg_path': None, 'download_dir': None}
 
     def save_setting(self, key, value):
         """Persists a single key to settings.json."""
-        valid_keys = {'ffmpeg_path', 'download_dir'}
+        valid_keys = {'ffmpeg_path', 'download_dir', 'filename_template', 'cookies_browser', 'cookies_file'}
         if key not in valid_keys:
             return {'success': False, 'error': f'Unknown key: {key}'}
         try:
@@ -83,6 +91,132 @@ class Api:
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    # ---- History log ------------------------------------------------------
+
+    def _get_history_path(self):
+        """Returns path to history.json, next to settings.json."""
+        return os.path.join(os.path.dirname(self._get_bin_dir()), 'history.json')
+
+    def load_history(self):
+        """Reads the archival history (newest first). Never raises."""
+        try:
+            path = self._get_history_path()
+            if not os.path.exists(path):
+                return {'history': []}
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                data = []
+            return {'history': data}
+        except Exception:
+            return {'history': []}
+
+    def append_history(self, entry):
+        """Inserts a completed transmission at the front of the log (unbounded)."""
+        try:
+            path = self._get_history_path()
+            history = self.load_history().get('history', [])
+            record = dict(entry or {})
+            record['time'] = time.time()
+            history.insert(0, record)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(history, f, indent=2)
+            return {'success': True, 'history': history}
+        except Exception as e:
+            return {'success': False, 'error': str(e), 'history': []}
+
+    def clear_history(self):
+        """Wipes the archival history log."""
+        try:
+            with open(self._get_history_path(), 'w', encoding='utf-8') as f:
+                json.dump([], f)
+            return {'success': True, 'history': []}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def open_path(self, path):
+        """Reveals a file/folder in the system file browser."""
+        try:
+            if not path:
+                return {'success': False, 'error': 'No path provided.'}
+            if not os.path.exists(path):
+                # Fall back to the parent directory if the exact file is gone.
+                path = os.path.dirname(path)
+                if not os.path.exists(path):
+                    return {'success': False, 'error': 'Path no longer exists.'}
+            if sys.platform == 'win32':
+                os.startfile(path)  # noqa: SLF / Windows-only
+            elif sys.platform == 'darwin':
+                subprocess.run(['open', path], check=False)
+            else:
+                subprocess.run(['xdg-open', path], check=False)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # ---- Timestamp helper -------------------------------------------------
+
+    def _parse_timestamp(self, ts):
+        """Parses 'HH:MM:SS', 'MM:SS', or plain seconds into float seconds."""
+        if ts is None:
+            return None
+        ts = str(ts).strip()
+        if not ts:
+            return None
+        try:
+            parts = [float(p) for p in ts.split(':')]
+        except ValueError:
+            return None
+        seconds = 0.0
+        for p in parts:
+            seconds = seconds * 60 + p
+        return seconds
+
+    def get_playlist_info(self, url):
+        """Lists the entries of a playlist without resolving each video fully."""
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': True,
+                'nocheckcertificate': True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+            entries_raw = info.get('entries')
+            if not entries_raw:
+                return {'success': False, 'is_playlist': False,
+                        'error': 'No playlist entries found at this URL.'}
+
+            entries = []
+            for e in entries_raw:
+                if not e:
+                    continue
+                dur = e.get('duration')
+                if isinstance(dur, (int, float)) and dur > 0:
+                    dur = int(dur)
+                    duration_str = f"{dur // 60:02d}:{dur % 60:02d}"
+                else:
+                    duration_str = '--:--'
+                entries.append({
+                    'url': e.get('url') or e.get('webpage_url') or e.get('id'),
+                    'title': e.get('title') or 'Untitled entry',
+                    'uploader': e.get('uploader') or e.get('channel') or '',
+                    'duration': duration_str,
+                })
+
+            return {
+                'success': True,
+                'is_playlist': True,
+                'title': info.get('title', 'Untitled Playlist'),
+                'uploader': info.get('uploader') or info.get('channel') or 'Unknown Source',
+                'count': len(entries),
+                'entries': entries,
+            }
+        except Exception as e:
+            return {'success': False, 'is_playlist': False, 'error': str(e)}
 
     def check_dependencies(self):
         """Checks if ffmpeg is available in any known location."""
@@ -136,6 +270,38 @@ class Api:
             return result[0]
         return None
 
+    def get_clipboard(self):
+        """Returns the current clipboard text (used for URL ghost-text suggestion)."""
+        try:
+            if sys.platform == 'win32':
+                text = subprocess.check_output(
+                    ['powershell', '-NoProfile', '-Command', 'Get-Clipboard'],
+                    text=True, timeout=2
+                ).strip()
+            elif sys.platform == 'darwin':
+                text = subprocess.check_output(['pbpaste'], text=True, timeout=2).strip()
+            else:
+                return {'text': ''}
+            return {'text': text}
+        except Exception:
+            return {'text': ''}
+
+    def check_ytdlp_update(self):
+        """Checks GitHub for a newer yt-dlp release than the bundled version."""
+        try:
+            import yt_dlp.version
+            current = yt_dlp.version.__version__
+            req = urllib.request.Request(
+                'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest',
+                headers={'User-Agent': 'Kinescope'}
+            )
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = json.loads(r.read())
+            latest = data.get('tag_name', '').lstrip('v')
+            return {'current': current, 'latest': latest, 'up_to_date': current >= latest}
+        except Exception:
+            return {'current': '', 'latest': '', 'up_to_date': True}
+
     def select_file(self):
         """Opens native file picker for selecting an existing executable."""
         if not self._window:
@@ -148,6 +314,16 @@ class Api:
             FileDialog.OPEN,
             file_types=file_types
         )
+        if result and len(result) > 0:
+            return result[0]
+        return None
+
+    def select_cookie_file(self):
+        """Opens native file picker for selecting a Netscape cookies.txt file."""
+        if not self._window:
+            return None
+        file_types = ('Cookie files (*.txt)', 'All files (*.*)')
+        result = self._window.create_file_dialog(FileDialog.OPEN, file_types=file_types)
         if result and len(result) > 0:
             return result[0]
         return None
@@ -193,7 +369,8 @@ class Api:
                 if 'entries' in info:
                     return {
                         'success': False,
-                        'error': 'Playlists are not supported yet. Please paste a single video URL.'
+                        'is_playlist': True,
+                        'error': 'This URL is a playlist. Open the playlist browser to pick entries.'
                     }
 
                 duration_secs = info.get('duration', 0)
@@ -240,24 +417,45 @@ class Api:
 
                 formats.append({'id': 'bestaudio/best', 'note': 'Audio Only (MP3)'})
 
+                # Caption tracks: manual subtitles first, then automatic captions.
+                subs_info = info.get('subtitles') or {}
+                auto_info = info.get('automatic_captions') or {}
+                subtitles = []
+                seen_langs = set()
+                for code in subs_info.keys():
+                    seen_langs.add(code)
+                    subtitles.append({'code': code, 'name': code, 'auto': False})
+                for code in auto_info.keys():
+                    if code in seen_langs:
+                        continue
+                    subtitles.append({'code': code, 'name': f'{code} (auto)', 'auto': True})
+
                 return {
                     'success': True,
                     'title': info.get('title', 'Unknown Title'),
                     'uploader': info.get('uploader', 'Unknown Creator'),
                     'duration': duration_str,
                     'thumbnail': info.get('thumbnail', ''),
-                    'formats': formats
+                    'id': info.get('id', ''),
+                    'upload_date': info.get('upload_date', ''),  # yt-dlp format: YYYYMMDD
+                    'formats': formats,
+                    'subtitles': subtitles,
                 }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def start_download(self, url, download_dir, format_id):
-        """Launches video download in a separate thread."""
-        self._cancel_requested = False
-        thread = threading.Thread(target=self._download_worker, args=(url, download_dir, format_id))
+    def start_download(self, url, download_dir, format_id, options=None, job_id=None):
+        """Launches a video download in its own thread, tagged with a job_id."""
+        job_id = str(job_id) if job_id is not None else 'single'
+        self._cancelled.discard(job_id)
+        self._active_jobs.add(job_id)
+        thread = threading.Thread(
+            target=self._download_worker,
+            args=(url, download_dir, format_id, options or {}, job_id)
+        )
         thread.daemon = True
         thread.start()
-        return {'status': 'started'}
+        return {'status': 'started', 'job_id': job_id}
 
     def install_ffmpeg(self, target_dir=''):
         """Launches automatic local FFmpeg downloader in a separate thread."""
@@ -431,17 +629,68 @@ class Api:
                 'message': f"FFmpeg download failed: {str(e)}"
             })
 
-    def _download_worker(self, url, download_dir, format_id):
-        """Worker thread that executes the yt-dlp download."""
+    def _download_worker(self, url, download_dir, format_id, options=None, job_id='single'):
+        """Worker thread that executes the yt-dlp download for one job."""
+
+        # yt-dlp calls hooks with only `d`, so per-job identity rides in via closures.
+        def progress_hook(d):
+            if job_id in self._cancelled:
+                raise Exception("Download cancelled by user")
+            if d['status'] == 'downloading':
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                percent = (downloaded / total * 100) if total > 0 else 0
+                speed = d.get('speed', 0)
+                if speed:
+                    speed_str = (f"{speed / (1024 * 1024):.1f} MB/s"
+                                 if speed > 1024 * 1024
+                                 else f"{speed / 1024:.1f} KB/s")
+                else:
+                    speed_str = 'N/A'
+                self._send_progress({
+                    'status': 'downloading',
+                    'percent': percent,
+                    'speed': speed_str,
+                    'eta': d.get('_eta_str', 'N/A'),
+                    'downloaded': d.get('_downloaded_bytes_str', 'N/A'),
+                    'total': d.get('_total_bytes_str', 'N/A'),
+                    'filename': os.path.basename(d.get('filename', '')),
+                }, job_id)
+            elif d['status'] == 'finished':
+                self._send_progress({
+                    'status': 'merging',
+                    'percent': 100,
+                    'message': 'Merging components and compiling stream...',
+                }, job_id)
+
+        def postprocessor_hook(d):
+            if job_id in self._cancelled:
+                raise Exception("Download cancelled by user")
+            if d['status'] == 'started':
+                self._send_progress({
+                    'status': 'processing',
+                    'percent': 100,
+                    'message': f"Post-processor: {d['postprocessor']}...",
+                }, job_id)
+            elif d['status'] == 'finished':
+                self._send_progress({
+                    'status': 'processing_done',
+                    'percent': 100,
+                    'message': "Component processing complete.",
+                }, job_id)
+
         try:
-            self._send_progress({'status': 'starting', 'message': 'Initializing extraction...'})
+            options = options or {}
+            self._send_progress({'status': 'starting', 'message': 'Initializing extraction...'}, job_id)
 
             is_audio_only = format_id == 'bestaudio/best'
+            template = options.get('filename_template') or '%(title)s.%(ext)s'
 
             ydl_opts = {
-                'outtmpl': os.path.join(download_dir, '%(title)s.%(ext)s'),
-                'progress_hooks': [self._progress_hook],
-                'postprocessor_hooks': [self._postprocessor_hook],
+                'outtmpl': os.path.join(download_dir, template),
+                'progress_hooks': [progress_hook],
+                'postprocessor_hooks': [postprocessor_hook],
+                'postprocessors': [],
                 'noprogress': True,
                 'quiet': True,
                 'no_warnings': True,
@@ -469,76 +718,77 @@ class Api:
 
             if is_audio_only:
                 ydl_opts['format'] = 'bestaudio/best'
-                ydl_opts['postprocessors'] = [{
+                ydl_opts['postprocessors'].append({
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
-                }]
+                })
             else:
                 ydl_opts['format'] = format_id
                 ydl_opts['merge_output_format'] = 'mp4'
 
+            # Caption tracks (manual + automatic), optionally embedded into the file.
+            subs = options.get('subtitles')
+            if subs and subs.get('enabled'):
+                lang = subs.get('lang') or 'en'
+                sub_format = subs.get('format') or 'srt'
+                ydl_opts['writesubtitles'] = True
+                ydl_opts['writeautomaticsub'] = True
+                ydl_opts['subtitleslangs'] = [lang]
+                ydl_opts['subtitlesformat'] = sub_format
+                if subs.get('embed') and not is_audio_only:
+                    ydl_opts['postprocessors'].append({'key': 'FFmpegEmbedSubtitle'})
+                else:
+                    ydl_opts['postprocessors'].append({
+                        'key': 'FFmpegSubtitlesConvertor',
+                        'format': sub_format,
+                    })
+
+            # Signal trim — download only a section between IN and OUT timestamps.
+            clip = options.get('clip')
+            if clip and (clip.get('start') or clip.get('end')):
+                start_sec = self._parse_timestamp(clip.get('start')) or 0.0
+                end_sec = self._parse_timestamp(clip.get('end'))
+                if end_sec is None:
+                    end_sec = float('inf')
+                if end_sec > start_sec:
+                    from yt_dlp.utils import download_range_func
+                    ydl_opts['download_ranges'] = download_range_func(
+                        None, [(start_sec, end_sec)]
+                    )
+                    ydl_opts['force_keyframes_at_cuts'] = True
+
+            # Authentication via cookies
+            cookies = options.get('cookies')
+            if cookies:
+                cookie_type = cookies.get('type')
+                if cookie_type == 'browser':
+                    browser_name = (cookies.get('browser') or 'chrome').lower()
+                    ydl_opts['cookiesfrombrowser'] = (browser_name, None, None, None)
+                elif cookie_type == 'file':
+                    cookie_path = cookies.get('file', '')
+                    if cookie_path and os.path.exists(cookie_path):
+                        ydl_opts['cookiefile'] = cookie_path
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
-            self._send_progress({'status': 'completed', 'percent': 100, 'message': 'Archival complete!'})
+            self._send_progress({'status': 'completed', 'percent': 100, 'message': 'Archival complete!'}, job_id)
         except Exception as e:
-            self._send_progress({'status': 'error', 'message': str(e)})
+            self._send_progress({'status': 'error', 'message': str(e)}, job_id)
+        finally:
+            self._active_jobs.discard(job_id)
+            self._cancelled.discard(job_id)
 
-    def _progress_hook(self, d):
-        if self._cancel_requested:
-            raise Exception("Download cancelled by user")
-        if d['status'] == 'downloading':
-            downloaded = d.get('downloaded_bytes', 0)
-            total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-            percent = (downloaded / total * 100) if total > 0 else 0
-
-            speed = d.get('speed', 0)
-            if speed:
-                speed_str = (f"{speed / (1024 * 1024):.1f} MB/s"
-                             if speed > 1024 * 1024
-                             else f"{speed / 1024:.1f} KB/s")
-            else:
-                speed_str = 'N/A'
-
-            self._send_progress({
-                'status': 'downloading',
-                'percent': percent,
-                'speed': speed_str,
-                'eta': d.get('_eta_str', 'N/A'),
-                'downloaded': d.get('_downloaded_bytes_str', 'N/A'),
-                'total': d.get('_total_bytes_str', 'N/A'),
-                'filename': os.path.basename(d.get('filename', ''))
-            })
-
-        elif d['status'] == 'finished':
-            self._send_progress({
-                'status': 'merging',
-                'percent': 100,
-                'message': 'Merging components and compiling stream...'
-            })
-
-    def _postprocessor_hook(self, d):
-        if self._cancel_requested:
-            raise Exception("Download cancelled by user")
-        if d['status'] == 'started':
-            self._send_progress({
-                'status': 'processing',
-                'percent': 100,
-                'message': f"Post-processor: {d['postprocessor']}..."
-            })
-        elif d['status'] == 'finished':
-            self._send_progress({
-                'status': 'processing_done',
-                'percent': 100,
-                'message': "Component processing complete."
-            })
-
-    def _send_progress(self, data):
-        """Sends data back to the React UI."""
+    def _send_progress(self, data, job_id=None):
+        """Sends data back to the React UI, tagged with its job_id when present."""
+        if job_id is not None:
+            data = {**data, 'job_id': job_id}
         if self._window:
             serialized = json.dumps(data)
-            self._window.evaluate_js(f"if (window.onDownloadProgress) window.onDownloadProgress({serialized});")
+            # Lock so concurrent worker threads don't interleave JS injection.
+            with self._emit_lock:
+                self._window.evaluate_js(f"if (window.onDownloadProgress) window.onDownloadProgress({serialized});")
 
 def _write_crash_log(text):
     log_path = os.path.join(os.path.expanduser('~'), 'kinescope_crash.log')

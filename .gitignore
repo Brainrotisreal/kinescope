@@ -24,3 +24,6 @@ frontend/dist/
 # Log files and local binaries downloaded at runtime
 *.log
 bin/
+
+# Local Claude Code guidance — keep out of the public repo
+CLAUDE.md
