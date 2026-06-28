@@ -10,6 +10,37 @@ const PLAYLIST_QUALITY = [
 
 const SUB_FORMATS = ['srt', 'vtt', 'ass'];
 
+// Video codec preference. Sent to the backend as options.codec and applied as a
+// soft yt-dlp format_sort key, so it steers the pick without ever failing the
+// download. 'h264' is the default because it plays on every device/player with no
+// extra codec — the cure for "you need a new codec" prompts in Windows players.
+const VIDEO_CODECS = [
+  {
+    value: 'h264', label: 'H.264 // Universal', tag: 'PLAYS EVERYWHERE',
+    blurb: 'The safe choice. Opens in every player, phone, TV, and editor with no extra codec to install.',
+    detail: 'Also called AVC. The most widely-supported video codec on Earth — if you just want the file to play, pick this.',
+    trade: 'Files are a bit larger than the newer codecs at the same quality.',
+  },
+  {
+    value: 'h265', label: 'H.265 // Efficient', tag: 'SMALLER FILES',
+    blurb: 'Roughly half the file size of H.264 at similar quality — but needs a recent player or a codec pack.',
+    detail: 'Also called HEVC. Great for saving disk space. Windows Media Player asks you to BUY the HEVC extension; VLC plays it free.',
+    trade: 'Older devices and the stock Windows player may refuse to open it without a (sometimes paid) codec.',
+  },
+  {
+    value: 'av1', label: 'AV1 // Next-Gen', tag: 'SMALLEST',
+    blurb: 'The newest, most space-efficient codec. Best compression, but the pickiest about player support.',
+    detail: 'Royalty-free and excellent quality-per-byte. Modern browsers and VLC handle it; many TVs and older PCs do not.',
+    trade: 'Needs very recent hardware/software. If unsure, this is the most likely to not play somewhere.',
+  },
+  {
+    value: 'any', label: 'Any // Best Quality', tag: 'NO PREFERENCE',
+    blurb: 'Let the source decide — grabs the highest-quality stream regardless of codec.',
+    detail: 'The original yt-dlp behaviour. You may get HEVC or AV1 and hit a "need a codec" prompt in some players.',
+    trade: 'No compatibility guarantee — this is how you can end up needing a paid codec.',
+  },
+];
+
 // Turn a yt-dlp language code (en, pt-BR, zh-Hans, ab…) into its full English
 // name — most people recognise "Spanish", not "es". Falls back to the raw code.
 const LANG_DISPLAY = (() => {
@@ -192,7 +223,8 @@ export default function App() {
   const [cookiesMode,        setCookiesMode]        = useState('none'); // 'none'|'browser'|'file'
   const [cookiesBrowser,     setCookiesBrowser]     = useState('chrome');
   const [cookiesFile,        setCookiesFile]        = useState('');
-  const [activeHelp,         setActiveHelp]         = useState(null); // null | 'filename' | 'auth'
+  const [activeHelp,         setActiveHelp]         = useState(null); // null | 'filename' | 'auth' | 'codec'
+  const [videoCodec,         setVideoCodec]         = useState('h264'); // h264 | h265 | av1 | any
   const [filenameBlocks,     setFilenameBlocks]     = useState([]);   // working blocks while builder is open
 
   const canvasRef = useRef(null);
@@ -260,6 +292,7 @@ export default function App() {
           }
           if (settings.cookies_browser) setCookiesBrowser(settings.cookies_browser);
           if (settings.cookies_file)    setCookiesFile(settings.cookies_file);
+          if (settings.video_codec)     setVideoCodec(settings.video_codec);
           window.pywebview.api.check_ytdlp_update()
             .then((info) => setYtdlpUpdateInfo(info))
             .catch(() => {});
@@ -635,6 +668,7 @@ export default function App() {
   // ---- Option assembly --------------------------------------------------
 
   const currentOptions = () => ({
+    codec: videoCodec,
     subtitles: subEnabled ? { enabled: true, lang: subLang || 'en', format: subFormat, embed: subEmbed } : null,
     clip: (clipStart || clipEnd) ? { start: clipStart, end: clipEnd } : null,
     filename_template: filenameTemplate || '%(title)s.%(ext)s',
@@ -964,14 +998,22 @@ export default function App() {
 
   // Real metadata used to render truthful filename examples. Falls back to
   // representative placeholders before a video has been scanned.
-  const fileExt = (selectedFormat || '').includes('bestaudio') && !(selectedFormat || '').includes('+')
-    ? 'mp3' : 'mp4';
+  const isAudioOnly = (selectedFormat || '').includes('bestaudio') && !(selectedFormat || '').includes('+');
+  const fileExt = isAudioOnly ? 'mp3' : 'mp4';
+  const activeCodec = VIDEO_CODECS.find((c) => c.value === videoCodec) || VIDEO_CODECS[0];
   const fileMeta = {
     title: videoInfo?.title || 'Video title',
     uploader: videoInfo?.uploader || 'Channel name',
     upload_date: videoInfo?.upload_date || '20260628',
     id: videoInfo?.id || 'dQw4w9WgXcQ',
     ext: fileExt,
+  };
+
+  // Codec preference is sticky — persist it so the compatibility choice carries
+  // across sessions (most users set "plays everywhere" once and forget it).
+  const applyVideoCodec = (value) => {
+    setVideoCodec(value);
+    if (window.pywebview?.api) window.pywebview.api.save_setting('video_codec', value);
   };
 
   // Selecting a naming style: mirror the dropdown's onChange so picking from the
@@ -1333,6 +1375,38 @@ export default function App() {
               </div>
             </>
           )}
+
+          {activeHelp === 'codec' && (
+            <>
+              <div className="help-overlay-title">VIDEO CODEC</div>
+              <p className="help-overlay-intro">
+                A codec is how the video is compressed. It doesn't change what you
+                see — only the file size and which players can open it. Tap one to
+                select it. If a player ever says <em>"you need a new codec"</em>,
+                that file used a codec the player can't read — pick H.264 to avoid it.
+              </p>
+              <div className="codec-grid">
+                {VIDEO_CODECS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    className={`codec-card${videoCodec === c.value ? ' selected' : ''}`}
+                    onClick={() => applyVideoCodec(c.value)}
+                  >
+                    <div className="codec-card-head">
+                      <span className="codec-card-title">{c.label}</span>
+                      <div className="codec-card-tag-row">
+                        <span className="codec-card-tag">{c.tag}</span>
+                        {videoCodec === c.value && <span className="codec-card-active">● ACTIVE</span>}
+                      </div>
+                    </div>
+                    <p className="codec-card-detail">{c.detail}</p>
+                    <p className="codec-card-trade"><strong>Trade-off:</strong> {c.trade}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1383,6 +1457,27 @@ export default function App() {
                 ))}
               </select>
             </div>
+            {!isAudioOnly && (
+              <div className="input-group">
+                <div className="input-label-row">
+                  <label className="input-label">VIDEO CODEC</label>
+                  <button type="button" className="help-badge" aria-label="What is a video codec"
+                    onClick={() => setActiveHelp('codec')}>
+                    <span className="help-icon">?</span>
+                  </button>
+                </div>
+                <select
+                  className="select-dropdown"
+                  value={videoCodec}
+                  onChange={(e) => applyVideoCodec(e.target.value)}
+                >
+                  {VIDEO_CODECS.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <span className="input-hint">{activeCodec.tag} — {activeCodec.blurb}</span>
+              </div>
+            )}
             {renderOptions()}
           </>
         )}

@@ -67,13 +67,14 @@ class Api:
                 'filename_template': data.get('filename_template', ''),
                 'cookies_browser': data.get('cookies_browser', ''),
                 'cookies_file': data.get('cookies_file', ''),
+                'video_codec': data.get('video_codec', ''),
             }
         except Exception:
             return {'ffmpeg_path': None, 'download_dir': None}
 
     def save_setting(self, key, value):
         """Persists a single key to settings.json."""
-        valid_keys = {'ffmpeg_path', 'download_dir', 'filename_template', 'cookies_browser', 'cookies_file'}
+        valid_keys = {'ffmpeg_path', 'download_dir', 'filename_template', 'cookies_browser', 'cookies_file', 'video_codec'}
         if key not in valid_keys:
             return {'success': False, 'error': f'Unknown key: {key}'}
         try:
@@ -726,6 +727,15 @@ class Api:
             else:
                 ydl_opts['format'] = format_id
                 ydl_opts['merge_output_format'] = 'mp4'
+
+                # Codec preference: a *soft* sort key so yt-dlp prefers the chosen
+                # video codec but still falls back gracefully if it's unavailable at
+                # the picked quality. 'h264' (AVC) is the universally-playable default
+                # — HEVC/AV1 are smaller but need a newer player/codec to open.
+                codec = (options.get('codec') or '').lower()
+                CODEC_SORT = {'h264': 'vcodec:h264', 'h265': 'vcodec:h265', 'av1': 'vcodec:av01'}
+                if codec in CODEC_SORT:
+                    ydl_opts['format_sort'] = [CODEC_SORT[codec]]
 
             # Caption tracks (manual + automatic), optionally embedded into the file.
             subs = options.get('subtitles')

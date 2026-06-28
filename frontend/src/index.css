@@ -1227,6 +1227,88 @@ body {
 }
 .auth-mono { font-family: var(--font-mono); color: var(--text-secondary); }
 
+/* --- Codec explainer cards (selectable inventory tiles) --- */
+.codec-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.codec-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px 13px 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.codec-card:hover { border-color: var(--text-secondary); }
+.codec-card.selected {
+  border-color: var(--border-focus);
+  background-color: rgba(245, 158, 11, 0.06);
+  box-shadow: 0 0 10px var(--color-amber-glow), var(--shadow-inset);
+}
+.codec-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.codec-card-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-amber);
+}
+.codec-card-tag {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  align-self: flex-start;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 5px;
+}
+.codec-card.selected .codec-card-tag {
+  color: var(--color-amber);
+  border-color: var(--border-focus);
+}
+.codec-card-detail {
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.codec-card-trade {
+  font-size: 0.6rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-color);
+}
+.codec-card-trade strong { color: var(--text-secondary); font-weight: 600; }
+.codec-card-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codec-card-active {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--color-green);
+  text-shadow: 0 0 6px var(--color-green-glow);
+  white-space: nowrap;
+}
+
 /* ============================================================
    v1.1.5 — Channel selector, options, playlist, queue, log
    ============================================================ */
