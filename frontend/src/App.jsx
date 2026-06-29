@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // Quality presets used by the playlist browser (one choice applies to every entry).
+// One quality applies to every selected entry. A flat playlist scan can't expose
+// each entry's real formats, so these lower rungs aren't verified per-video — the
+// trailing /best makes a missing rung fall back to the closest available size.
 const PLAYLIST_QUALITY = [
   { id: 'bestvideo+bestaudio/best', note: 'Best Quality' },
   { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
   { id: 'bestvideo[height<=720]+bestaudio/best', note: '720p HD' },
+  { id: 'bestvideo[height<=480]+bestaudio/best', note: '480p SD' },
+  { id: 'bestvideo[height<=360]+bestaudio/best', note: '360p SD' },
+  { id: 'bestvideo[height<=240]+bestaudio/best', note: '240p' },
+  { id: 'bestvideo[height<=144]+bestaudio/best', note: '144p' },
   { id: 'bestaudio/best', note: 'Audio Only (MP3)' },
 ];
 
@@ -606,6 +613,11 @@ export default function App() {
           formats: [
             { id: 'bestvideo+bestaudio/best', note: 'Best Quality (Default)' },
             { id: 'bestvideo[height<=1080]+bestaudio/best', note: '1080p FHD' },
+            { id: 'bestvideo[height<=720]+bestaudio/best', note: '720p HD' },
+            { id: 'bestvideo[height<=480]+bestaudio/best', note: '480p SD' },
+            { id: 'bestvideo[height<=360]+bestaudio/best', note: '360p SD' },
+            { id: 'bestvideo[height<=240]+bestaudio/best', note: '240p' },
+            { id: 'bestvideo[height<=144]+bestaudio/best', note: '144p' },
             { id: 'bestaudio/best', note: 'Audio Only (MP3)' },
           ],
           subtitles: [
@@ -1520,6 +1532,12 @@ export default function App() {
           {PLAYLIST_QUALITY.map((q) => <option key={q.id} value={q.id}>{q.note}</option>)}
         </select>
       </div>
+      {/^bestvideo\[height<=(480|360|240|144)\]/.test(playlistQuality) && (
+        <span className="cookies-inline-hint">
+          Low resolutions apply per entry only where the source offers them — most do, but
+          a few entries may land on their closest available size instead.
+        </span>
+      )}
       <div className="playlist-list">
         {playlist.entries.map((e, i) => (
           <div

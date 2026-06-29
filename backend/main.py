@@ -379,36 +379,46 @@ class Api:
                 seconds = duration_secs % 60
                 duration_str = f"{minutes:02d}:{seconds:02d}"
 
-                # Get max height and check if video stream is present
+                # Scan streams: is there video at all, and what real heights exist?
                 raw_formats = info.get('formats', []) or []
-                max_height = 0
                 has_video = False
+                available_heights = set()
                 for f in raw_formats:
-                    if f.get('vcodec') != 'none':
+                    if f.get('vcodec') and f.get('vcodec') != 'none':
                         has_video = True
-                    h = f.get('height')
-                    if h and isinstance(h, int):
-                        if h > max_height:
-                            max_height = h
+                        h = f.get('height')
+                        if isinstance(h, int) and h > 0:
+                            available_heights.add(h)
 
                 formats = [{'id': 'bestvideo+bestaudio/best', 'note': 'Best Quality (Default)'}]
-                
-                candidates = [
-                    (4320, 'bestvideo[height<=4320]+bestaudio/best', '8K UHD (4320p)'),
-                    (2160, 'bestvideo[height<=2160]+bestaudio/best', '4K UHD (2160p)'),
-                    (1440, 'bestvideo[height<=1440]+bestaudio/best', '2K QHD (1440p)'),
+
+                # Quality ladder, ascending. Each rung owns the band (prev, height]; we
+                # only offer a rung when a real stream falls inside its band, so the menu
+                # mirrors exactly what the source actually serves (no phantom 144p on a
+                # video whose floor is 360p). yt-dlp picks the best stream <= the rung.
+                ladder = [
+                    (144,  'bestvideo[height<=144]+bestaudio/best',  '144p'),
+                    (240,  'bestvideo[height<=240]+bestaudio/best',  '240p'),
+                    (360,  'bestvideo[height<=360]+bestaudio/best',  '360p SD'),
+                    (480,  'bestvideo[height<=480]+bestaudio/best',  '480p SD'),
+                    (720,  'bestvideo[height<=720]+bestaudio/best',  '720p HD'),
                     (1080, 'bestvideo[height<=1080]+bestaudio/best', '1080p FHD'),
-                    (720, 'bestvideo[height<=720]+bestaudio/best', '720p HD'),
-                    (480, 'bestvideo[height<=480]+bestaudio/best', '480p SD'),
-                    (360, 'bestvideo[height<=360]+bestaudio/best', '360p SD')
+                    (1440, 'bestvideo[height<=1440]+bestaudio/best', '2K QHD (1440p)'),
+                    (2160, 'bestvideo[height<=2160]+bestaudio/best', '4K UHD (2160p)'),
+                    (4320, 'bestvideo[height<=4320]+bestaudio/best', '8K UHD (4320p)'),
                 ]
-                
-                if max_height > 0:
-                    for h, fmt_id, note in candidates:
-                        if h <= max_height:
-                            formats.append({'id': fmt_id, 'note': note})
+
+                if available_heights:
+                    prev = 0
+                    rungs = []
+                    for h, fmt_id, note in ladder:
+                        if any(prev < ah <= h for ah in available_heights):
+                            rungs.append({'id': fmt_id, 'note': note})
+                        prev = h
+                    formats.extend(reversed(rungs))  # best -> worst, matching prior order
                 else:
-                    # Fallback for videos/sites where height is not resolved but video exists
+                    # Fallback for sites where heights don't resolve but video exists.
+                    # These selectors end in /best, so they degrade gracefully per-video.
                     if has_video:
                         formats.extend([
                             {'id': 'bestvideo[height<=1080]+bestaudio/best', 'note': '1080p FHD'},
